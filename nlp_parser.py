@@ -1,5 +1,6 @@
 import spacy
 from spacy.language import Language
+from spacy.cli import download
 
 # We define a custom NLP function to extract IP addresses using Regex within SpaCy.
 # SpaCy's default model is great for finding People, Dates, and Organizations, 
@@ -14,8 +15,7 @@ def setup_nlp_pipeline():
     except OSError:
         # If the user hasn't downloaded the model yet, we download it automatically
         print("Downloading SpaCy 'en_core_web_sm' model. This may take a minute...")
-        import spacy.cli
-        spacy.cli.download("en_core_web_sm")
+        download("en_core_web_sm")
         nlp = spacy.load("en_core_web_sm")
     
     # Check if we already added our custom IP rule to avoid errors on reload
