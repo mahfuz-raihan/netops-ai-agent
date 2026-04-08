@@ -3,18 +3,19 @@ from pydantic import BaseModel
 import sqlite3
 import json
 from nlp_parser import extract_entities_from_log
+from ml_anomaly_detector import detect_anomaly
 
 # Initialize FastAPI app
 app = FastAPI(title="NetOps-AI Log Ingestion API")
 
-# Database setup (We changed the name slightly to create a fresh DB with a new column)
-DB_NAME = "netops_logs_v2.db"
+# Database setup (Changed to v3 to trigger a fresh database creation)
+DB_NAME = "netops_logs_v3.db"
 
 def init_db():
     """Create the SQLite database and logs table if they don't exist."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # Notice we added an 'extracted_nlp_data' column
+    # Notice we added is_anomaly and anomaly_score
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +24,9 @@ def init_db():
             action TEXT,
             status TEXT,
             message TEXT,
-            extracted_nlp_data TEXT
+            extracted_nlp_data TEXT,
+            is_anomaly BOOLEAN,
+            anomaly_score REAL
         )
     ''')
     conn.commit()
@@ -43,28 +46,35 @@ async def ingest_log(log: LogEntry):
     """Endpoint to receive network logs, parse them via NLP, and save to SQLite."""
     try:
         # --- NLP STEP ---
-        # Pass the raw message to our SpaCy NLP parser
         nlp_entities = extract_entities_from_log(log.message)
-        
-        # Convert the Python dictionary to a JSON string so we can save it in SQLite
         nlp_entities_json = json.dumps(nlp_entities)
+        
+        # --- ML ANOMALY DETECTION STEP ---
+        # Pass the message to our PyTorch/HuggingFace model
+        ml_results = detect_anomaly(log.message)
+        is_anomaly = ml_results["is_anomaly"]
+        anomaly_score = ml_results["confidence_score"]
+        
+        # (Optional) Log to terminal if an attack is detected
+        if is_anomaly:
+            print(f"🚨 ALERT! Anomaly detected with {anomaly_score*100}% confidence: {log.ip_address}")
         
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         
-        # Insert the log and the new NLP data into the database
+        # Insert all data into the database
         cursor.execute('''
-            INSERT INTO logs (timestamp, ip_address, action, status, message, extracted_nlp_data)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (log.timestamp, log.ip_address, log.action, log.status, log.message, nlp_entities_json))
+            INSERT INTO logs (timestamp, ip_address, action, status, message, extracted_nlp_data, is_anomaly, anomaly_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (log.timestamp, log.ip_address, log.action, log.status, log.message, nlp_entities_json, is_anomaly, anomaly_score))
         
         conn.commit()
         conn.close()
         
-        # We return the extracted data in the API response so you can see it working!
         return {
             "status": "success", 
-            "extracted_nlp": nlp_entities
+            "extracted_nlp": nlp_entities,
+            "ml_analysis": ml_results
         }
     
     except Exception as e:
