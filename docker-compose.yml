@@ -14,3 +14,5 @@ services:
     volumes:
       # Mount the safe staging file to your local machine so you can review it
       - ./staged_rules.txt:/app/staged_rules.txt
+      # NEW: Give the agent access to the live firewall file
+      - ./firewall_rules.txt:/app/firewall_rules.txt
