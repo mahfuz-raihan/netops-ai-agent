@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  openclaw-agent:
+    build: .
+    container_name: netops-openclaw-agent
+    ports:
+      # Bind strictly to localhost (127.0.0.1) to prevent external network access
+      - "127.0.0.1:8001:8001"
+    environment:
+      # host.docker.internal routes traffic to Ollama running on your Windows host
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - AGENT_MODEL=llama3.2:1b
+    volumes:
+      # Mount the safe staging file to your local machine so you can review it
+      - ./staged_rules.txt:/app/staged_rules.txt
