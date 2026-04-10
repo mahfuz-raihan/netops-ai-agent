@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetOps-AI Security Operations Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { gray: { 900: '#111827', 800: '#1f2937' } } } } }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div class="flex items-center space-x-3">
+            <i data-lucide="shield" class="text-blue-500 w-8 h-8"></i>
+            <h1 class="text-2xl font-bold tracking-wider">NetOps-AI <span class="text-gray-400 font-light">| SOC
+                    Dashboard</span></h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="relative flex h-3 w-3">
+                <span
+                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500" id="status-indicator"></span>
+            </span>
+            <span class="text-sm text-gray-300" id="status-text">System Active</span>
+        </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <main class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-80px)]">
+
+        <!-- LEFT PANEL: All Network Logs -->
+        <section class="bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden shadow-xl">
+            <div class="bg-gray-700/50 px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+                <h2 class="font-semibold text-lg flex items-center gap-2">
+                    <i data-lucide="activity" class="w-5 h-5 text-gray-400"></i>
+                    Live Network Traffic
+                </h2>
+                <span class="text-xs text-gray-400" id="log-count">0 logs</span>
+            </div>
+            <div class="overflow-y-auto flex-1 p-4" id="log-container">
+                <!-- Logs will be injected here via JS -->
+                <div class="text-center text-gray-500 mt-10">Waiting for network data...</div>
+            </div>
+        </section>
+
+        <!-- RIGHT PANEL: Anomalies & Agent Approvals -->
+        <section
+            class="bg-gray-800 rounded-lg border border-red-900/50 flex flex-col overflow-hidden shadow-xl relative">
+            <div class="absolute inset-0 bg-red-500/5 pointer-events-none"></div>
+            <div class="bg-red-900/20 px-4 py-3 border-b border-red-900/50 flex items-center justify-between z-10">
+                <h2 class="font-semibold text-lg flex items-center gap-2 text-red-400">
+                    <i data-lucide="shield-alert" class="w-5 h-5"></i>
+                    Active Threats & Agent Approvals
+                </h2>
+            </div>
+            <div class="overflow-y-auto flex-1 p-4 space-y-4 z-10" id="threat-container">
+                <!-- Threats will be injected here via JS -->
+                <div class="text-center text-gray-500 mt-10">No active threats detected.</div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // State management
+        const API_BASE = "http://127.0.0.1:8000";
+        let lastLogId = 0;
+        let blockedIPs = new Set();
+        let dismissedThreats = new Set();
+        let connectionErrorLogged = false; // Track to prevent console spam
+
+        // Format timestamp
+        const formatTime = (isoString) => {
+            const d = new Date(isoString);
+            return d.toLocaleTimeString() + '.' + d.getMilliseconds().toString().padStart(3, '0');
+        };
+
+        // Render Normal Logs
+        const renderLogs = (logs) => {
+            const container = document.getElementById('log-container');
+
+            if (logs.length === 0) return;
+
+            container.innerHTML = logs.map(log => `
+                <div class="mb-2 text-sm font-mono flex items-center py-1 border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                    <span class="text-gray-500 w-24 flex-shrink-0">${formatTime(log.timestamp)}</span>
+                    <span class="${log.is_anomaly ? 'text-red-400 font-bold' : 'text-blue-400'} w-32 flex-shrink-0">${log.ip_address}</span>
+                    <span class="text-gray-300 w-24 flex-shrink-0">${log.action}</span>
+                    <span class="${log.status === 'SUCCESS' ? 'text-green-500' : 'text-yellow-500'} flex-1 truncate">${log.message}</span>
+                </div>
+            `).join('');
+        };
+
+        // Render Threat Cards
+        const renderThreats = (anomalies) => {
+            const container = document.getElementById('threat-container');
+
+            // Filter out threats that are already blocked or dismissed
+            const activeThreats = anomalies.filter(a => !blockedIPs.has(a.ip_address) && !dismissedThreats.has(a.id));
+
+            if (activeThreats.length === 0) {
+                container.innerHTML = `<div class="text-center text-gray-500 mt-10 flex flex-col items-center"><i data-lucide="check-circle" class="w-12 h-12 text-green-500/50 mb-2"></i>Network is secure.</div>`;
+                lucide.createIcons();
+                return;
+            }
+
+            container.innerHTML = activeThreats.map(threat => `
+                <div class="bg-gray-900 border border-red-500/30 rounded-lg p-4 shadow-lg transform transition-all hover:scale-[1.01]" id="threat-${threat.id}">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <span class="bg-red-500/20 text-red-400 text-xs font-bold px-2 py-1 rounded border border-red-500/20">SEVERITY: CRITICAL</span>
+                            <h3 class="text-xl font-bold mt-2 text-gray-100">Attacker IP: ${threat.ip_address}</h3>
+                            <p class="text-sm text-gray-400 font-mono mt-1">${threat.message}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs text-gray-500 block">ML Confidence</span>
+                            <span class="text-lg font-bold text-red-400">${(threat.anomaly_score * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-800 rounded border border-gray-700 p-3 mb-4">
+                        <span class="text-xs text-blue-400 font-bold uppercase tracking-wider mb-1 block">🤖 OpenClaw Agent Analysis</span>
+                        <p class="text-sm text-gray-300 italic">"${threat.agent_report || 'Awaiting agent analysis...'}"</p>
+                    </div>
+
+                    <div class="flex space-x-3">
+                        <button onclick="approveBlock('${threat.ip_address}', ${threat.id})" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded flex items-center justify-center gap-2 transition-colors">
+                            <i data-lucide="shield-alert" class="w-4 h-4"></i> Approve Firewall Block
+                        </button>
+                        <button onclick="dismissThreat(${threat.id})" class="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2 px-4 rounded transition-colors">
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        };
+
+        // Polling function to get data from FastAPI
+        async function fetchDashboardData() {
+            try {
+                const res = await fetch(`${API_BASE}/logs?limit=50`);
+                if (!res.ok) throw new Error("Network response was not ok");
+                const data = await res.json();
+
+                // Reset error state on successful connection
+                if (connectionErrorLogged) {
+                    connectionErrorLogged = false;
+                    document.getElementById('status-text').innerText = "System Active";
+                    document.getElementById('status-indicator').classList.replace("bg-yellow-500", "bg-green-500");
+                    document.getElementById('log-count').classList.remove("text-yellow-500");
+                }
+
+                document.getElementById('log-count').innerText = `${data.logs.length} logs`;
+                renderLogs(data.logs);
+                renderThreats(data.logs.filter(l => l.is_anomaly === 1 || l.is_anomaly === true));
+
+            } catch (err) {
+                // Handle Offline / CORS / Canvas Preview mode gracefully
+                if (!connectionErrorLogged) {
+                    console.warn(`Could not connect to FastAPI server at ${API_BASE}. Running in simulation mode.`);
+                    connectionErrorLogged = true;
+                    document.getElementById('status-text').innerText = "Backend Offline";
+                    document.getElementById('status-indicator').classList.replace("bg-green-500", "bg-yellow-500");
+                }
+
+                // Provide simulated UI data so the dashboard still renders without the backend
+                const simulatedLogs = [
+                    { id: 997, timestamp: new Date(Date.now() - 15000).toISOString(), ip_address: "192.168.1.42", action: "LOGIN", status: "SUCCESS", message: "User admin authenticated", is_anomaly: false },
+                    { id: 998, timestamp: new Date(Date.now() - 8000).toISOString(), ip_address: "10.0.0.105", action: "GET /api/v1/users", status: "SUCCESS", message: "Fetched user list", is_anomaly: false },
+                    { id: 999, timestamp: new Date(Date.now() - 2000).toISOString(), ip_address: "45.33.22.11", action: "BRUTE_FORCE", status: "FAILED", message: "150 failed login attempts in 3 seconds", is_anomaly: true, anomaly_score: 0.96, agent_report: "High-frequency authentication failure detected. Recommend blocking the IP to prevent account compromise." }
+                ];
+
+                document.getElementById('log-count').innerText = "Simulated Data (Backend Offline)";
+                document.getElementById('log-count').classList.add("text-yellow-500");
+
+                renderLogs(simulatedLogs);
+                renderThreats(simulatedLogs.filter(l => l.is_anomaly === 1 || l.is_anomaly === true));
+            }
+        }
+
+        // Action: Approve the AI's recommendation
+        async function approveBlock(ipAddress, threatId) {
+            try {
+                const res = await fetch(`${API_BASE}/approve-block`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip_address: ipAddress })
+                });
+
+                if (res.ok) {
+                    blockedIPs.add(ipAddress);
+                    alert(`✅ IP ${ipAddress} has been successfully blocked at the firewall!`);
+                    fetchDashboardData(); // Refresh UI instantly
+                } else {
+                    throw new Error("Server rejected block request");
+                }
+            } catch (err) {
+                // If offline, simulate the block in UI
+                console.warn("Backend offline. Simulating IP block locally.");
+                blockedIPs.add(ipAddress);
+                alert(`⚠️ Backend offline. UI has simulated blocking IP ${ipAddress}!`);
+                fetchDashboardData();
+            }
+        }
+
+        // Action: Dismiss the warning
+        function dismissThreat(threatId) {
+            dismissedThreats.add(threatId);
+            fetchDashboardData(); // Refresh UI
+        }
+
+        // Start the polling loop (every 2 seconds)
+        fetchDashboardData();
+        setInterval(fetchDashboardData, 2000);
+    </script>
+</body>
+
+</html>
