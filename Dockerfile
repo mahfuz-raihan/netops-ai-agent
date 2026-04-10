@@ -1,32 +1,28 @@
 # Use a lightweight Python image
 FROM python:3.10-slim
 
-# Create a non-root user named 'agentuser' for security
+# Create a non-root user for security
 RUN useradd -m -s /bin/bash agentuser
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Install OpenClaw and requests
-RUN pip install --no-cache-dir openclaw requests
+# Install dependencies for our custom agent server
+RUN pip install --no-cache-dir fastapi uvicorn requests
 
-# Copy your custom netops skill into the container
+# Copy our custom agent server and the skill folder into the container
+COPY agent_server.py /app/agent_server.py
 COPY ./netops_skill /app/netops_skill
 
 # Create the staging file for our Human-in-the-Loop firewall rules
 RUN touch /app/staged_rules.txt
 
-# Give 'agentuser' ownership of the app directory so it can write to the file
+# Give the restricted user ownership
 RUN chown -R agentuser:agentuser /app
 
-# Switch from 'root' to our restricted user
+# Switch to the restricted user
 USER agentuser
 
-# Register the skill locally for the agentuser
-RUN openclaw plugins install ./netops_skill
-
-# Expose the port OpenClaw will run on
 EXPOSE 8001
 
-# Start the OpenClaw gateway server
-CMD ["openclaw", "serve", "--host", "0.0.0.0", "--port", "8001"]
+# Run our custom Agent Gateway instead of the CLI tool
+CMD ["python", "agent_server.py"]
