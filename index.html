@@ -94,9 +94,9 @@
             container.innerHTML = logs.map(log => `
                 <div class="mb-2 text-sm font-mono flex items-center py-1 border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
                     <span class="text-gray-500 w-24 flex-shrink-0">${formatTime(log.timestamp)}</span>
-                    <span class="${log.is_anomaly ? 'text-red-400 font-bold' : 'text-blue-400'} w-32 flex-shrink-0">${log.ip_address}</span>
-                    <span class="text-gray-300 w-24 flex-shrink-0">${log.action}</span>
-                    <span class="${log.status === 'SUCCESS' ? 'text-green-500' : 'text-yellow-500'} flex-1 truncate">${log.message}</span>
+                    <span class="${log.is_anomaly ? 'text-red-400 font-bold' : (log.status === 'BLOCKED' ? 'text-red-600 line-through' : 'text-blue-400')} w-32 flex-shrink-0">${log.ip_address}</span>
+                    <span class="${log.status === 'BLOCKED' ? 'text-red-500 font-bold' : 'text-gray-300'} w-24 flex-shrink-0">${log.action}</span>
+                    <span class="${log.status === 'SUCCESS' ? 'text-green-500' : (log.status === 'BLOCKED' ? 'text-red-500 font-bold bg-red-900/40 px-2 rounded' : 'text-yellow-500')} flex-1 truncate">${log.message}</span>
                 </div>
             `).join('');
         };
