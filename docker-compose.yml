@@ -12,7 +12,6 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - AGENT_MODEL=llama3.2:1b
     volumes:
-      # Mount the safe staging file to your local machine so you can review it
+      # Mount BOTH files so OpenClaw can read/write to your Windows desktop
       - ./staged_rules.txt:/app/staged_rules.txt
-      # NEW: Give the agent access to the live firewall file
       - ./firewall_rules.txt:/app/firewall_rules.txt
