@@ -3,5 +3,6 @@ __pycache__
 .env
 *.sqbpro
 *.pyc
-*.json
+*.json 
 .vscode
+netops_skill/
