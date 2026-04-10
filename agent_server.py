@@ -3,6 +3,7 @@ import subprocess
 import requests
 import os
 import uvicorn
+import re # <-- ADDED: For robust IP extraction
 
 app = FastAPI(title="Secure Agent Gateway")
 
@@ -32,9 +33,11 @@ async def handle_agent_task(request: Request):
         ai_decision = response.json().get("response", "").strip()
         
         # 2. Execute the Skill based on the AI's decision
-        if ai_decision != "NO_ACTION" and "." in ai_decision:
-            # Clean up the IP just in case the AI added punctuation
-            ip_to_block = ai_decision.split()[0].replace(",", "").replace('"', '')
+        # FIX: Use Regular Expressions to find the IP address, no matter what extra words the AI says
+        ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', ai_decision)
+        
+        if "NO_ACTION" not in ai_decision.upper() and ip_match:
+            ip_to_block = ip_match.group(0)
             
             # Securely run the Python skill script
             process = subprocess.run(
@@ -44,7 +47,7 @@ async def handle_agent_task(request: Request):
             )
             return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()} | AI IP Extracted: {ip_to_block}"}
         else:
-            return {"result": "Agent reviewed the logs and determined no action was necessary."}
+            return {"result": f"Agent determined no action needed, or failed to extract IP. Raw AI Output: {ai_decision}"}
             
     except Exception as e:
         return {"result": f"Agent Execution Error: {str(e)}"}
