@@ -3,7 +3,9 @@ from pydantic import BaseModel
 import sqlite3
 import json
 import requests
-from fastapi.middleware.cors import CORSMiddleware # <-- NEW: Import CORS
+import os
+import datetime
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import our custom AI modules built in the previous sprints
 from nlp_parser import extract_entities_from_log
@@ -12,15 +14,14 @@ from ml_anomaly_detector import detect_anomaly
 # Initialize FastAPI app
 app = FastAPI(title="NetOps-AI Log Ingestion API")
 
-# --- NEW: Add CORS Middleware ---
+# --- CORS Middleware ---
 # This allows our external HTML Dashboard to fetch data from this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace "*" with the specific domain of your UI
+    allow_origins=["*"], 
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# -------------------------------
 
 # Bumped database version to v5 for a completely clean slate
 DB_NAME = "netops_logs_v5.db"
@@ -55,9 +56,34 @@ class LogEntry(BaseModel):
     status: str
     message: str
 
+# --- Virtual Firewall Checker ---
+def is_ip_blocked(ip_address: str) -> bool:
+    """Checks if the IP address exists in the live firewall_rules.txt file."""
+    if not os.path.exists("firewall_rules.txt"):
+        return False
+    
+    try:
+        with open("firewall_rules.txt", "r") as file:
+            rules = file.read()
+            # If the IP is anywhere in the file, it is considered blocked
+            if ip_address in rules:
+                return True
+    except Exception:
+        pass
+    return False
+
 @app.post("/ingest-log")
 async def ingest_log(log: LogEntry):
     """Endpoint to receive logs, process them, and trigger the Docker Agent."""
+    
+    # --- ENFORCE THE FIREWALL ---
+    if is_ip_blocked(log.ip_address):
+        print(f"🛑 FIREWALL BLOCK: Dropped connection from blocked IP {log.ip_address}")
+        # Throw a 403 Forbidden error immediately. 
+        # No DB save, no ML inference, no Agent trigger.
+        raise HTTPException(status_code=403, detail="Connection Dropped by Firewall")
+    # ---------------------------------------------
+
     try:
         # 1. NLP Extraction
         nlp_entities = extract_entities_from_log(log.message)
@@ -70,7 +96,7 @@ async def ingest_log(log: LogEntry):
         
         agent_report = "N/A - Normal Traffic"
         
-        # 3. Secure Agent Trigger
+        # 3. Secure Agent Trigger (Staging)
         if is_anomaly:
             print(f"\n🚨 ATTACK DETECTED! ML Confidence: {anomaly_score * 100:.2f}%")
             print("Triggering Secure OpenClaw Agent in Docker...")
@@ -126,41 +152,47 @@ async def ingest_log(log: LogEntry):
 
 @app.get("/logs")
 async def get_logs(limit: int = 50):
+    """Endpoint for the Web Dashboard to pull the latest logs."""
     conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row # <-- NEW: Forces SQLite to return dicts instead of tuples
+    conn.row_factory = sqlite3.Row # Forces SQLite to return dicts instead of tuples
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM logs ORDER BY id DESC LIMIT ?', (limit,))
-    rows = [dict(row) for row in cursor.fetchall()] # <-- NEW: Convert rows to standard Python dictionaries
+    rows = [dict(row) for row in cursor.fetchall()] # Convert rows to standard Python dictionaries
     conn.close()
     return {"logs": rows}
 
-# --- NEW: Dashboard Approval Endpoint ---
+# --- Dashboard Approval Endpoint ---
 class ApproveAction(BaseModel):
     ip_address: str
 
 @app.post("/approve-block")
 async def approve_block(action: ApproveAction):
     """
-    Called by the web dashboard when the Security Admin clicks 'Approve'.
-    This moves the IP from 'Staged' into the actual live firewall rules.
+    Called by the web dashboard. Delegates the actual execution back to the OpenClaw Agent.
     """
-    import datetime
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rule = f"[{timestamp}] DENY IN FROM {action.ip_address} # ADMIN APPROVED VIA DASHBOARD\n"
+    print(f"\n🛡️ HUMAN OVERRIDE: Admin approved block for IP {action.ip_address}")
+    print("Delegating execution command back to OpenClaw Agent...")
     
-    # Write to a new 'live' firewall file representing our actual network
+    execution_prompt = f"""
+    SYSTEM COMMAND: EXECUTE PREVIOUSLY STAGED RULE
+    Human authorization received. 
+    You are cleared to use the `execute_ip_block` tool on IP: {action.ip_address}
+    """
+    
     try:
-        with open("firewall_rules.txt", "a") as file:
-            file.write(rule)
-        print(f"\n🛡️ HUMAN OVERRIDE: Admin approved permanent block for IP {action.ip_address}")
-        return {"status": "success", "message": f"IP {action.ip_address} blocked."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def get_logs(limit: int = 10):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM logs ORDER BY id DESC LIMIT ?', (limit,))
-    rows = cursor.fetchall()
-    conn.close()
-    return {"logs": rows}
+        # Send the command to the Agent in Docker
+        agent_response = requests.post(
+            "http://127.0.0.1:8001/api/agent", 
+            json={"prompt": execution_prompt},
+            timeout=10
+        )
+        
+        if agent_response.status_code == 200:
+            result = agent_response.json().get("result", "")
+            print(f"🤖 Agent Execution Log:\n{result}")
+            return {"status": "success", "message": f"Agent successfully executed block on {action.ip_address}."}
+        else:
+            raise HTTPException(status_code=500, detail="Agent rejected execution command.")
+            
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reach Agent: {str(e)}")
