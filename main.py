@@ -56,9 +56,16 @@ class LogEntry(BaseModel):
     status: str
     message: str
 
+# --- NEW: In-Memory Block List to fix Docker File Sync Lag ---
+BLOCKED_IPS = set()
+
 # --- Virtual Firewall Checker ---
 def is_ip_blocked(ip_address: str) -> bool:
-    """Checks if the IP address exists in the live firewall_rules.txt file."""
+    """Checks if the IP address exists in the live firewall_rules.txt file or memory."""
+    # Instantly check memory first
+    if ip_address in BLOCKED_IPS:
+        return True
+        
     if not os.path.exists("firewall_rules.txt"):
         return False
     
@@ -67,6 +74,7 @@ def is_ip_blocked(ip_address: str) -> bool:
             rules = file.read()
             # If the IP is anywhere in the file, it is considered blocked
             if ip_address in rules:
+                BLOCKED_IPS.add(ip_address) # Cache it in memory
                 return True
     except Exception:
         pass
@@ -79,8 +87,18 @@ async def ingest_log(log: LogEntry):
     # --- ENFORCE THE FIREWALL ---
     if is_ip_blocked(log.ip_address):
         print(f"🛑 FIREWALL BLOCK: Dropped connection from blocked IP {log.ip_address}")
-        # Throw a 403 Forbidden error immediately. 
-        # No DB save, no ML inference, no Agent trigger.
+        
+        # NEW: Save the dropped connection to the DB so the Dashboard can see the AI working!
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO logs (timestamp, ip_address, action, status, message, extracted_nlp_data, is_anomaly, anomaly_score, agent_report)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (log.timestamp, log.ip_address, "FIREWALL_DROP", "BLOCKED", "Connection instantly dropped by AI Firewall Rule", "{}", False, 0.0, "Auto-blocked by OpenClaw Agent."))
+        conn.commit()
+        conn.close()
+        
+        # Throw a 403 Forbidden error immediately to the generator. 
         raise HTTPException(status_code=403, detail="Connection Dropped by Firewall")
     # ---------------------------------------------
 
@@ -133,7 +151,7 @@ async def ingest_log(log: LogEntry):
                 agent_report = f"Failed to reach Docker Agent at port 8001. Is it running? Error: {str(e)}"
                 print(f"❌ {agent_report}")
         else:
-            print(f"✅ Normal traffic processed from {log.ip_address}")
+            None
 
         # 4. Save to Database
         conn = sqlite3.connect(DB_NAME)
@@ -190,6 +208,10 @@ async def approve_block(action: ApproveAction):
         if agent_response.status_code == 200:
             result = agent_response.json().get("result", "")
             print(f"🤖 Agent Execution Log:\n{result}")
+            
+            # NEW: Force sync the blocked IP into FastAPI memory instantly
+            BLOCKED_IPS.add(action.ip_address)
+            
             return {"status": "success", "message": f"Agent successfully executed block on {action.ip_address}."}
         else:
             raise HTTPException(status_code=500, detail="Agent rejected execution command.")
