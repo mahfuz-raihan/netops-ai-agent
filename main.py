@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import sqlite3
 import json
 import requests
+from fastapi.middleware.cors import CORSMiddleware # <-- NEW: Import CORS
 
 # Import our custom AI modules built in the previous sprints
 from nlp_parser import extract_entities_from_log
@@ -10,6 +11,16 @@ from ml_anomaly_detector import detect_anomaly
 
 # Initialize FastAPI app
 app = FastAPI(title="NetOps-AI Log Ingestion API")
+
+# --- NEW: Add CORS Middleware ---
+# This allows our external HTML Dashboard to fetch data from this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, replace "*" with the specific domain of your UI
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# -------------------------------
 
 # Bumped database version to v5 for a completely clean slate
 DB_NAME = "netops_logs_v5.db"
@@ -114,6 +125,38 @@ async def ingest_log(log: LogEntry):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/logs")
+async def get_logs(limit: int = 50):
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row # <-- NEW: Forces SQLite to return dicts instead of tuples
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM logs ORDER BY id DESC LIMIT ?', (limit,))
+    rows = [dict(row) for row in cursor.fetchall()] # <-- NEW: Convert rows to standard Python dictionaries
+    conn.close()
+    return {"logs": rows}
+
+# --- NEW: Dashboard Approval Endpoint ---
+class ApproveAction(BaseModel):
+    ip_address: str
+
+@app.post("/approve-block")
+async def approve_block(action: ApproveAction):
+    """
+    Called by the web dashboard when the Security Admin clicks 'Approve'.
+    This moves the IP from 'Staged' into the actual live firewall rules.
+    """
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rule = f"[{timestamp}] DENY IN FROM {action.ip_address} # ADMIN APPROVED VIA DASHBOARD\n"
+    
+    # Write to a new 'live' firewall file representing our actual network
+    try:
+        with open("firewall_rules.txt", "a") as file:
+            file.write(rule)
+        print(f"\n🛡️ HUMAN OVERRIDE: Admin approved permanent block for IP {action.ip_address}")
+        return {"status": "success", "message": f"IP {action.ip_address} blocked."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def get_logs(limit: int = 10):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
