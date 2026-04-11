@@ -1,18 +1,19 @@
-# NetOps-AI Agent
+# NetOps-AI: Autonomous Security Operations Center 🛡️
 
 ## Project Description
 
-NetOps-AI Agent is an intelligent, automated network operations and security monitoring system. The platform is designed to ingest raw network logs in real-time, analyze them for potential cyber attacks or anomalies, and take automated remediation actions—all while keeping humans in the loop when necessary. 
+NetOps-AI is a containerized, AI-driven Security Operations Center (SOC) that autonomously monitors network traffic, detects anomalies using Machine Learning, and deploys closed-loop automated firewall defenses using a local Large Language Model (LLM) and an Agentic framework.
 
-By utilizing state-of-the-art AI technologies like Natural Language Processing (NLP) and Machine Learning (ML), alongside a secure Agent Gateway for reasoning, the platform dramatically reduces response times to potential threats.
+By utilizing state-of-the-art AI technologies like NLP and ML, alongside a secure Agent Gateway (OpenClaw Agent) for reasoning, the platform dramatically reduces response times to potential threats.
 
-## Key Highlights
+## 🚀 Key Features
 
-- **Intelligent Log Ingestion**: Uses a high-performance FastAPI backend to receive log streams securely.
-- **NLP Entity Extraction**: Employs **SpaCy** (via an `en_core_web_sm` model and a custom EntityRuler) to reliably parse complex, unstructured log texts and extract actionable data such as Protocol Types and IP Addresses.
-- **Zero-Shot ML Anomaly Detection**: Uses a PyTorch-backed **DistilBERT** Zero-Shot classification pipeline to flag potential network attacks or failures with a calculated confidence score without the need for extensive traditional rule writing. 
-- **Isolated AI Agent Gateway**: Upon attack detection, logs are routed to a containerized Secure Agent Gateway (OpenClaw Agent) backed by **Ollama (llama3.2:1b)**. The agent independently reviews the threat and proposes or stages defense strategies.
-- **Human-in-the-Loop Override & Virtual Firewall**: Includes endpoints for humans to securely review isolated agent findings and explicitly execute IP block requests, feeding data back into the system's virtual firewall dynamically.
+- **Real-time Traffic Ingestion:**: Uses a high-performance FastAPI backend to receive log streams securely.
+- **Deep Learning Anomaly Detection:**: Utilizes a PyTorch Hugging Face model `(distilbert-base-uncased-mnli)` for `zero-shot classification` to detect brute-force attacks and network anomalies.
+- **Local LLM Integration**: Leverages **Ollama (llama3.2:1b)** running locally to analyze threats and provide human-readable incident context without relying on paid cloud APIs.
+- **Isolated AI Agent**: Uses `OpenClaw` inside a secure, isolated Docker container to propose and execute network firewall blocks automatically.
+- **Human-in-the-Loop (HITL) Dashboard**: A custom-built, dark-mode SOC web interface allowing security engineers to monitor traffic and approve/deny AI-staged firewall rules.
+- **CI/CD Pipeline**: Fully integrated `GitHub Actions` workflow for automated Pytest execution.
 
 ## System Design Pattern
 
@@ -36,16 +37,26 @@ flowchart TD
     K --> G
 ```
 
-### 1. AI Processing Pipeline
-Data flows through a direct, sequential pipeline strictly governing state:
-* **Ingest → Firewall Check → NLP Entity Extraction → ML Attack Classification → Database Persist**.
-This enforces that all AI evaluations (extraction and reasoning mapping) happen monotonically so that subsequent steps always have access to previously processed structured data. 
+🏗️ System Architecture
 
-### 2. Event-Driven Agent Orchestration
-When an anomaly exceeds the confidence threshold (e.g., >60% malicious probability), it fires an event to an isolated Microservice—the *Agent Server*. The main FastAPI service merely dispatches an untrusted log to the Agent Server via an HTTP request, completely decoupling the reasoning/tactic tier from the main ingestion pathway. 
+**Log Generator**: Simulates normal network traffic and targeted `Brute Force/DDoS` attacks.
 
-### 3. Human-in-the-Loop (HITL) Pattern
-The design heavily enforces security by staging autonomous decisions instead of blindly executing them. 
-* The autonomous agent decides *if* a rule should be staged based on the `target IP` it extracted.
-* It places this into a staging phase but requires an explicit `/approve-block` action triggered by a human administrator via the dashboard. 
-* Once approved, the system delegates execution back to the agent using strict `"EXECUTE PREVIOUSLY STAGED RULE"` directives, completely shifting from open-ended reasoning to deterministic execution.
+**FastAPI Virtual Firewall**: Intercepts traffic, blocking known bad IPs instantly from an in-memory cache and live `firewall_rules.txt` file.
+
+**ML Inference Engine**: Evaluates unblocked traffic using `zero-shot` deep learning models.
+
+**OpenClaw Agent Gateway (Docker)**: If an anomaly is detected, the log is securely passed to the containerized `OpenClaw` Agent.
+
+**LLM Analysis**: The Agent consults `Llama 3.2` to extract the attacker's IP and proposes a staging rule.
+
+**SOC Dashboard**: The UI displays the pending threat. Upon Human Approval, the FastAPI server delegates execution authority back to the `OpenClaw` Agent.
+
+**Execution**: The Agent applies the live block, and the network is secured.
+
+🛠️ Tech Stack
+
+- **Language**: Python 3.10
+- **API Framework**: FastAPI, Uvicorn
+- **Machine Learning**: PyTorch, Hugging Face Transformers, SpaCy
+- **AI Agent**: OpenClaw, Ollama (Llama 3.2 / Qwen)
+- **DevOps / MLOps**: Docker, Docker Compose, GitHub Actions, Pytest
