@@ -24,7 +24,7 @@ def test_normal_traffic_ingestion():
     response = client.post("/ingest-log", json=safe_log)
     
     # Assert the request was successful
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     # Assert the ML model correctly classified it as safe
     assert response.json()["is_anomaly"] is False
 
