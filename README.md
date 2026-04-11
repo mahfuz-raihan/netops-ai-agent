@@ -1,4 +1,7 @@
 # NetOps-AI: Autonomous Security Operations Center 🛡️
+## 🖥️ Dashboard Preview
+
+![NetOps-AI Dashboard](assets/dashboard.png)
 
 ## Project Description
 
@@ -84,6 +87,3 @@ This project includes automated testing for the API endpoints and ML processing 
 ```
 pytest test_main.py -v
 ```
-## 🖥️ Dashboard Preview
-
-![NetOps-AI Dashboard](assets/dashboard.png)
