@@ -1,15 +1,16 @@
-# Network Operation Defender (HITL)
+# Name: Network Operations Defender (HITL)
 
-# Description: Safely process IP blockes for human review.
+# Description: Safely proposes and executes IP blocks for human review.
 
-## Tool: stage_ip_block 
-Use this tools when you detect a severe network anomaly. you MUST NOT attach to run shell commands. You must use this tools to stage a rule for human approval.
+## Tool: stage_ip_block
+Use this tool to stage a rule for human approval when a network anomaly is detected. Command: ```python stage_ip_block.py {ip_address}```
+
+## Tool: execute_ip_block
+Use this tool ONLY when explicitly authorized by human command to apply a live firewall block. Command: ```python execute_ip_block.py {ip_address}```
 
 ### parameter
 - `ip_address`(string, required): The exact IPv4 address to block
 
-### Execution:
-command: python stage_ip_block.py {ip_address}
 
 ### Response:
 - If the tool returns "success", you can confirm the action to the user.
