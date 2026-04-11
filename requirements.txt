@@ -1,9 +1,7 @@
-fastapi
-pydantic
-requests
-spacy
-transformers
-torch
-ollama
-uvicorn
-python-dotenv
+fastapi==0.135.3
+ollama==0.6.1
+pydantic==2.12.5
+Requests==2.33.1
+spacy==3.8.14
+transformers==4.44.2
+uvicorn==0.44.0

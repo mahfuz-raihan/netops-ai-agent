@@ -31,7 +31,6 @@
     </header>
 
     <main class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-80px)]">
-
         <section class="bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden shadow-xl">
             <div class="bg-gray-700/50 px-4 py-3 border-b border-gray-700 flex items-center justify-between">
                 <h2 class="font-semibold text-lg flex items-center gap-2">
@@ -56,7 +55,6 @@
                 <div class="text-center text-gray-500 mt-10">No active threats detected.</div>
             </div>
         </section>
-
     </main>
 
     <script>
@@ -130,14 +128,12 @@
 
         async function fetchDashboardData() {
             try {
-                // First, fetch the list of IPs that the Agent has already blocked to survive refreshes
                 const blockRes = await fetch(`${API_BASE}/blocked-ips`);
                 if (blockRes.ok) {
                     const blockData = await blockRes.json();
                     blockData.blocked_ips.forEach(ip => blockedIPs.add(ip));
                 }
 
-                // Then, fetch the latest logs
                 const res = await fetch(`${API_BASE}/logs?limit=50`);
                 if (!res.ok) throw new Error("Network response was not ok");
                 const data = await res.json();

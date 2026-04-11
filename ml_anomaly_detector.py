@@ -1,20 +1,29 @@
 from transformers import pipeline
-import torch
 import warnings
+import os
 
-# Suppress some harmless huggingface warnings to keep our terminal clean
+# Suppress harmless HuggingFace warnings
 warnings.filterwarnings("ignore")
 
-print("Loading Hugging Face Zero-Shot Classifier (PyTorch backend)...")
-print("This might take a minute on the first run to download the model.")
+MODEL_NAME = os.getenv("ANOMALY_MODEL", "typeform/distilbert-base-uncased-mnli")
 
-# We load a small, fast "DistilBERT" model configured for Natural Language Inference (NLI)
-# We explicitly set framework="pt" to ensure it uses PyTorch.
-classifier = pipeline(
-    "zero-shot-classification", 
-    model="typeform/distilbert-base-uncased-mnli", 
-    framework="pt"
-)
+# Lazy singleton — model is NOT loaded at import time.
+# It is created on the first call to detect_anomaly().
+_classifier = None
+
+def _get_classifier():
+    """Load the classifier on first use (lazy init) to avoid crashing on startup."""
+    global _classifier
+    if _classifier is None:
+        print(f"Loading Hugging Face Zero-Shot Classifier ({MODEL_NAME})...")
+        print("This may take a minute on first run to download the model.")
+        _classifier = pipeline(
+            "zero-shot-classification",
+            model=MODEL_NAME,
+            framework="pt"
+        )
+        print("✅ Classifier loaded successfully.")
+    return _classifier
 
 def detect_anomaly(log_message: str) -> dict:
     """
@@ -25,7 +34,7 @@ def detect_anomaly(log_message: str) -> dict:
     candidate_labels = ["normal network traffic", "malicious cyber attack or failure"]
     
     # The model processes the text and returns probabilities for each label
-    result = classifier(log_message, candidate_labels)
+    result = _get_classifier()(log_message, candidate_labels)
     
     # Extract the scores (result["labels"] and result["scores"] are sorted highest to lowest)
     labels = result["labels"]
