@@ -49,7 +49,7 @@ flowchart TD
 
 🛠️ Tech Stack
 
-- **Language**: Python 3.10
+- **Language**: Python 3.11
 - **API Framework**: FastAPI, Uvicorn
 - **Machine Learning**: PyTorch, Hugging Face Transformers, SpaCy
 - **AI Agent**: OpenClaw, Ollama (Llama 3.2 / Qwen)
