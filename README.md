@@ -28,11 +28,11 @@ flowchart TD
     E --> F[ML Classification / DistilBERT]
     
     F -->|Normal Network Traffic| G[(SQLite Database)]
-    F -->|Malicious Anomaly Detetcted| H((Agent Gateway / Ollama))
+    F -->|Malicious Anomaly Detetcted| H((OpenClaw Agent / Ollama))
     
     H --> I[Stage IP Block Rule]
     I --> J{Human Dashboard / HITL}
-    J -- /approve-block --> K[Execute IP Block Rule]
+    J -- /approve-block --> H((OpenClaw Agent / Ollama)) --> K[Execute IP Block Rule]
     K --> C
     K --> G
 ```
