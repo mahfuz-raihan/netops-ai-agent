@@ -1,4 +1,3 @@
-# Use a lightweight Python image
 FROM python:3.10-slim
 
 # Create a non-root user for security
@@ -13,9 +12,10 @@ RUN pip install --no-cache-dir fastapi uvicorn requests openclaw
 COPY agent_server.py /app/agent_server.py
 COPY ./netops_skill /app/netops_skill
 
-# Create BOTH files and give the restricted user permission to write to them
-RUN touch /app/staged_rules.txt
-RUN touch /app/firewall_rules.txt
+# Create rules directory and give the restricted user permission
+RUN mkdir -p /app/rules
+RUN touch /app/rules/staged_rules.txt
+RUN touch /app/rules/firewall_rules.txt
 RUN chown -R agentuser:agentuser /app
 
 # Switch to the restricted user
