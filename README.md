@@ -39,19 +39,13 @@ flowchart TD
 
 🏗️ System Architecture
 
-**Log Generator**: Simulates normal network traffic and targeted `Brute Force/DDoS` attacks.
-
-**FastAPI Virtual Firewall**: Intercepts traffic, blocking known bad IPs instantly from an in-memory cache and live `firewall_rules.txt` file.
-
-**ML Inference Engine**: Evaluates unblocked traffic using `zero-shot` deep learning models.
-
-**OpenClaw Agent Gateway (Docker)**: If an anomaly is detected, the log is securely passed to the containerized `OpenClaw` Agent.
-
-**LLM Analysis**: The Agent consults `Llama 3.2` to extract the attacker's IP and proposes a staging rule.
-
-**SOC Dashboard**: The UI displays the pending threat. Upon Human Approval, the FastAPI server delegates execution authority back to the `OpenClaw` Agent.
-
-**Execution**: The Agent applies the live block, and the network is secured.
+- **Log Generator**: Simulates normal network traffic and targeted `Brute Force/DDoS` attacks.
+- **FastAPI Virtual Firewall**: Intercepts traffic, blocking known bad IPs instantly from an in-memory cache and live `firewall_rules.txt` file.
+- **ML Inference Engine**: Evaluates unblocked traffic using `zero-shot` deep learning models.
+- **OpenClaw Agent Gateway (Docker)**: If an anomaly is detected, the log is securely passed to the containerized `OpenClaw` Agent.
+- **LLM Analysis**: The Agent consults `Llama 3.2` to extract the attacker's IP and proposes a staging rule.
+- **SOC Dashboard**: The UI displays the pending threat. Upon Human Approval, the FastAPI server delegates execution authority back to the `OpenClaw` Agent.
+- **Execution**: The Agent applies the live block, and the network is secured.
 
 🛠️ Tech Stack
 
@@ -60,3 +54,35 @@ flowchart TD
 - **Machine Learning**: PyTorch, Hugging Face Transformers, SpaCy
 - **AI Agent**: OpenClaw, Ollama (Llama 3.2 / Qwen)
 - **DevOps / MLOps**: Docker, Docker Compose, GitHub Actions, Pytest
+
+## How to Run Locally
+1. Clone the repository
+```
+git clone [https://github.com/mahfuz-raihan/netops-ai-agent.git](https://github.com/mahfuz-raihan/netops-ai-agent.git)
+cd netops-ai-agent
+```
+2. Start the OpenClaw Docker Agent
+```
+docker-compose up --build
+```
+3. Install Python Dependencies (in a separate terminal)
+```
+pip install -r requirements.txt
+```
+4. Start the FastAPI Backend
+```
+uvicorn main:app --reload
+```
+5. Open the SOC Dashboard Double-click the `index.html` file in your browser.
+6. Start the Network Simulator
+```
+python log_generator.py
+```
+
+## 🧪 Testing
+This project includes automated testing for the API endpoints and ML processing logic. Run tests using:
+```
+pytest test_main.py -v
+```
+
+
