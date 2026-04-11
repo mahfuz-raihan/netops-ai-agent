@@ -37,7 +37,7 @@ flowchart TD
     K --> G
 ```
 
-🏗️ System Architecture
+## 🏗️ System Architecture
 
 - **Log Generator**: Simulates normal network traffic and targeted `Brute Force/DDoS` attacks.
 - **FastAPI Virtual Firewall**: Intercepts traffic, blocking known bad IPs instantly from an in-memory cache and live `firewall_rules.txt` file.
@@ -47,7 +47,7 @@ flowchart TD
 - **SOC Dashboard**: The UI displays the pending threat. Upon Human Approval, the FastAPI server delegates execution authority back to the `OpenClaw` Agent.
 - **Execution**: The Agent applies the live block, and the network is secured.
 
-🛠️ Tech Stack
+## 🛠️ Tech Stack
 
 - **Language**: Python 3.11
 - **API Framework**: FastAPI, Uvicorn
