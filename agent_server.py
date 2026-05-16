@@ -17,7 +17,7 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 def send_to_discord(message: str):
     """Helper function to send messages to Discord."""
-    if DISCORD_WEBHOOK_URL != "YOUR_WEBHOOK_URL_HERE":
+    if DISCORD_WEBHOOK_URL != os.getenv("DISCORD_WEBHOOK_URL"):
         try:
             requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
         except Exception as e:
