@@ -117,7 +117,7 @@ async def ingest_log(log: LogEntry):
                 agent_response = requests.post(
                     "http://127.0.0.1:8001/api/agent", 
                     json={"prompt": agent_prompt},
-                    timeout=30
+                    timeout=60
                 )
                 
                 if agent_response.status_code == 200:

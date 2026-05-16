@@ -8,7 +8,7 @@ import re
 app = FastAPI(title="Secure Agent Gateway")
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-MODEL = os.getenv("AGENT_MODEL", "qwen3.5:0.8b")
+MODEL = os.getenv("AGENT_MODEL")
 
 @app.post("/api/agent")
 async def handle_agent_task(request: Request):
