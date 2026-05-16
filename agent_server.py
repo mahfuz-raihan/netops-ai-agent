@@ -2,13 +2,26 @@ from fastapi import FastAPI, Request
 import subprocess
 import requests
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import uvicorn
 import re
 
 app = FastAPI(title="Secure Agent Gateway")
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-MODEL = os.getenv("AGENT_MODEL")
+MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+
+
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+
+def send_to_discord(message: str):
+    """Helper function to send messages to Discord."""
+    if DISCORD_WEBHOOK_URL != "YOUR_WEBHOOK_URL_HERE":
+        try:
+            requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
+        except Exception as e:
+            print(f"Failed to send Discord webhook: {e}")
 
 @app.post("/api/agent")
 async def handle_agent_task(request: Request):
@@ -18,7 +31,6 @@ async def handle_agent_task(request: Request):
     is_execution_order = "EXECUTE PREVIOUSLY STAGED RULE" in incident_prompt
 
     if is_execution_order:
-        # HUMAN APPROVED: Bypass LLM to guarantee reliable execution.
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', incident_prompt)
         
         if ip_match:
@@ -29,32 +41,30 @@ async def handle_agent_task(request: Request):
                 ["python", "/app/netops_skill/execute_ip_block.py", ip_to_block],
                 capture_output=True, text=True
             )
-            return {"result": f"Execution Success: {process.stdout.strip()}"}
+            
+            # Agent confirms execution in Discord
+            send_to_discord(f"✅ **OpenClaw:** Executed live firewall block on `{ip_to_block}`. Network is secure.")
+            
+            return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()}"}
         else:
             return {"result": "Agent Error: Could not find IP in execution order."}
 
     else:
-        # --- PHASE 2 UPDATE: PERSONA INJECTION ---
+        # [FORENSIC SANDBOX] - Adopt the loyal persona
         tactical_prompt = incident_prompt + """
-        
-        AGENT DIRECTIVE: 
-        If the log is safe, reply exactly with 'NO_ACTION'.
-        If the log is malicious, you MUST adopt your loyal AI persona and reply EXACTLY in this format:
-        "Hey boss/master! Our AI system detected hacking attempts from [INSERT IP HERE]. I have staged a firewall rule. May I block this? I am waiting for your approval."
+        \n\nAGENT DIRECTIVE: You are a loyal Cyber Defense AI. Your master is the human Security Admin.
+        If the log is safe, reply 'NO_ACTION'. 
+        If malicious, reply EXACTLY like this: 'Hey boss! Our AI system detected hacking attempts from [INSERT IP]. May I block this?'
         """
-        # ------------------------------------------
         
         try:
-            # Talk to Ollama
             response = requests.post(f"{OLLAMA_URL}/api/generate", json={"model": MODEL, "prompt": tactical_prompt, "stream": False})
             ai_decision = response.json().get("response", "").strip()
             
-            # Use Regex to ensure the AI actually included an IP address in its chatty response
             ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', ai_decision)
             
-            if ip_match and "NO_ACTION" not in ai_decision.upper() and "I CANNOT ASSIST" not in ai_decision.upper():
+            if ip_match and "NO_ACTION" not in ai_decision.upper():
                 ip_to_block = ip_match.group(0)
-                print(f"Agent detected threat from {ip_to_block}. Staging block...")
                 
                 # RUN THE STAGING SKILL
                 process = subprocess.run(
@@ -62,11 +72,13 @@ async def handle_agent_task(request: Request):
                     capture_output=True, text=True
                 )
                 
-                # We return the AI's chatty persona message so it appears on the Dashboard!
-                return {"result": f"{ai_decision}"}
+                # Agent asks for permission in Discord
+                send_to_discord(f"🤖 **OpenClaw:** {ai_decision}\n\n*(Type `!approve {ip_to_block}` to authorize)*")
+                
+                return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()}"}
                 
             else:
-                return {"result": f"Agent determined no action needed or was blocked by safety filters. Raw AI Output: {ai_decision}"}
+                return {"result": f"Agent determined no action needed. Raw AI Output: {ai_decision}"}
                 
         except Exception as e:
             return {"result": f"Agent Error: {str(e)}"}
