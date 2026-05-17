@@ -6,9 +6,13 @@ import requests
 import os
 import datetime
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
 from nlp_parser import extract_entities_from_log
 from ml_anomaly_detector import detect_anomaly
+from guardrails import check_content, check_logic_before_execute, scrub_pii
+
+load_dotenv()
 
 app = FastAPI(title="NetOps-AI Log Ingestion API")
 
@@ -80,11 +84,20 @@ async def ingest_log(log: LogEntry):
         conn.close()
         raise HTTPException(status_code=403, detail="Connection Dropped by Firewall")
 
+    # ── Guardrail 4: Content Validation — validate log fields before processing ──
+    content_check = check_content(log.model_dump())
+    if not content_check.passed:
+        print(f"🚨 [GUARDRAIL] Log entry rejected: {content_check.reason}")
+        raise HTTPException(status_code=422, detail=f"Guardrail validation failed: {content_check.reason}")
+
+    # Scrub PII from the log message before storing or forwarding it
+    sanitized_message = scrub_pii(log.message)
+
     try:
-        nlp_entities = extract_entities_from_log(log.message)
+        nlp_entities = extract_entities_from_log(sanitized_message)
         nlp_entities_json = json.dumps(nlp_entities)
-        
-        ml_results = detect_anomaly(log.message)
+
+        ml_results = detect_anomaly(sanitized_message)
         is_anomaly = ml_results["is_anomaly"]
         anomaly_score = ml_results["confidence_score"]
         
@@ -122,7 +135,7 @@ async def ingest_log(log: LogEntry):
         cursor.execute('''
             INSERT INTO logs (timestamp, ip_address, action, status, message, extracted_nlp_data, is_anomaly, anomaly_score, agent_report)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (log.timestamp, log.ip_address, log.action, log.status, log.message, nlp_entities_json, is_anomaly, anomaly_score, agent_report))
+        ''', (log.timestamp, log.ip_address, log.action, log.status, sanitized_message, nlp_entities_json, is_anomaly, anomaly_score, agent_report))
         conn.commit()
         conn.close()
         
@@ -148,7 +161,17 @@ class ApproveAction(BaseModel):
 async def approve_block(action: ApproveAction):
     print(f"\n🛡️ HUMAN OVERRIDE: Admin approved block for IP {action.ip_address}")
     print("Delegating execution command back to OpenClaw Agent...")
-    
+
+    # ── Guardrail 5: Logic — prevent double-block before hitting the agent ────
+    logic_check = check_logic_before_execute(
+        action.ip_address,
+        staged_rules_path="rules/staged_rules.txt",
+        blocked_ips_set=BLOCKED_IPS
+    )
+    if not logic_check.passed:
+        print(f"⚠️ [GUARDRAIL] Approve-block rejected: {logic_check.reason}")
+        raise HTTPException(status_code=409, detail=f"Guardrail rejected approval: {logic_check.reason}")
+
     execution_prompt = f"EXECUTE PREVIOUSLY STAGED RULE FOR IP: {action.ip_address}"
     
     try:
