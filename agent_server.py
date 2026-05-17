@@ -6,6 +6,15 @@ import uvicorn
 import re
 from openai import AzureOpenAI
 from dotenv import load_dotenv
+from guardrails import (
+    check_security,
+    check_ip_validity,
+    check_command_injection,
+    check_response_relevance,
+    check_language_quality,
+    check_logic_before_execute,
+    scrub_pii,
+)
 load_dotenv()
 
 app = FastAPI(title="Secure Agent Gateway")
@@ -70,7 +79,16 @@ async def handle_agent_task(request: Request):
     data = await request.json()
     incident_prompt = data.get("prompt", "")
     print(f"[DEBUG] Raw Prompt Received: {incident_prompt[:100]}...")
-    
+
+    # ── Guardrail 1: Security — block prompt injection attempts ──────────────
+    security_check = check_security(incident_prompt)
+    if not security_check.passed:
+        print(f"🚨 [GUARDRAIL] Request blocked. Reason: {security_check.reason}")
+        return {"result": f"Guardrail blocked request: {security_check.reason}"}
+
+    # Scrub any PII from the prompt before forwarding it anywhere
+    incident_prompt = scrub_pii(incident_prompt)
+
     is_execution_order = "EXECUTE PREVIOUSLY STAGED RULE" in incident_prompt
 
     if is_execution_order:
@@ -80,23 +98,42 @@ async def handle_agent_task(request: Request):
         if ip_match:
             ip_to_block = ip_match.group(0)
             print(f"[DEBUG] Extracted IP for execution: {ip_to_block}")
+
+            # ── Guardrail 2: IP validity + command injection before subprocess ──
+            ip_check = check_ip_validity(ip_to_block, allow_private=True, context="execution")
+            if not ip_check.passed:
+                print(f"🚨 [GUARDRAIL] Execution blocked. Reason: {ip_check.reason}")
+                return {"result": f"Guardrail blocked execution: {ip_check.reason}"}
+
+            # ── Guardrail 5: Logic — check staged & rate limit ───────────────
+            logic_check = check_logic_before_execute(
+                ip_to_block,
+                staged_rules_path="/app/rules/staged_rules.txt",
+                blocked_ips_set=set()
+            )
+            if not logic_check.passed:
+                print(f"⚠️ [GUARDRAIL] Execution logic check failed: {logic_check.reason}")
+                return {"result": f"Guardrail blocked execution: {logic_check.reason}"}
+
             try:
                 process = subprocess.run(
                     ["python", "/app/netops_skill/execute_ip_block.py", ip_to_block],
                     capture_output=True, text=True
                 )
                 print(f"[DEBUG] Subprocess executed. Output: {process.stdout}")
-                
-                # Tell Discord that the execution was successful
+
+                # ── Guardrail 5: Validate subprocess actually succeeded ──────
+                if process.returncode != 0 or "ERROR" in process.stderr.upper():
+                    print(f"⚠️ [GUARDRAIL] Subprocess returned an error. stderr: {process.stderr.strip()}")
+
                 send_to_discord(f"✅ **OpenClaw Executed:** Live firewall block applied to `{ip_to_block}`. Network secured.")
-                
                 return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()}"}
             except Exception as e:
-                 print(f"[DEBUG] Subprocess failed. Error: {e}")
-                 return {"result": f"Agent Error: {str(e)}"}
+                print(f"[DEBUG] Subprocess failed. Error: {e}")
+                return {"result": f"Agent Error: {str(e)}"}
         else:
-             print("❌ [DEBUG] Execution failed: Could not find IP.")
-             return {"result": "Agent Error: Could not find IP in execution order."}
+            print("❌ [DEBUG] Execution failed: Could not find IP.")
+            return {"result": "Agent Error: Could not find IP in execution order."}
 
     else:
         print("[DEBUG] Workflow: THREAT ANALYSIS detected.")
@@ -115,14 +152,26 @@ async def handle_agent_task(request: Request):
             
             ai_decision = response.json().get("response", "").strip()
             print(f"[DEBUG] Raw Ollama Response: '{ai_decision}'")
-            
+
+            # ── Guardrail 2: Response Relevance — validate LLM output ────────
+            relevance_check = check_response_relevance(ai_decision)
+            if not relevance_check.passed:
+                print(f"⚠️ [GUARDRAIL] LLM response failed relevance check: {relevance_check.reason}")
+                return {"result": f"Guardrail: LLM response not usable. {relevance_check.reason}"}
+
             # Extract IP from LLM response
             ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', ai_decision)
-            
+
             if ip_match:
                 ip_to_block = ip_match.group(0)
                 print(f"[DEBUG] Threat confirmed. IP extracted: {ip_to_block}. Staging rule...")
-                
+
+                # ── Guardrail 1: Validate the extracted IP before staging ────
+                ip_check = check_ip_validity(ip_to_block, allow_private=True, context="staging")
+                if not ip_check.passed:
+                    print(f"🚨 [GUARDRAIL] Staging blocked — invalid IP: {ip_check.reason}")
+                    return {"result": f"Guardrail blocked staging: {ip_check.reason}"}
+
                 try:
                     # RUN THE STAGING SKILL
                     process = subprocess.run(
@@ -132,21 +181,27 @@ async def handle_agent_task(request: Request):
                     print(f"[DEBUG] Staging subprocess finished. Output: {process.stdout}")
                 except Exception as e:
                     print(f"❌ [DEBUG] Staging script crashed: {e}")
-                
+
                 # cloud LLM deep analysis (Azure OpenAI) + send to Discord for human approval
                 azure_report = get_azure_forensic_report(incident_prompt)
-                # combine and send to discord with clear instructions for the SOC analyst to approve the block if they agree with the AI's assessment
+
+                # ── Guardrail 3: Language Quality — validate Azure report ────
+                quality_check = check_language_quality(azure_report, context="forensic report")
+                if not quality_check.passed:
+                    print(f"⚠️ [GUARDRAIL] Azure report failed quality check: {quality_check.reason}")
+                    azure_report = "*(Forensic report unavailable — quality check failed.)*"
+
                 discord_message = (
-                    f"\n\n🤖 **OpenClaw:** Boss!!! Our AI system detected something unusual illegal activities"
+                    f"\n\n🤖 **OpenClaw:** Boss!!! Our AI system detected something unusual illegal activities "
                     f"such as hacking and unauthorized access to systems from `{ip_to_block}`, \n"
                     f"May I block this? I'm waiting for your approval.\n"
                     f"\n*(Type `!approve {ip_to_block}` to authorize)*\n"
                     f"\n☁️ **Forensic Analysis:** {azure_report}\n\n"
                 )
                 send_to_discord(discord_message)
-                
+
                 return {"result": "Staged successfully."}
-                
+
             else:
                 return {"result": f"No IP found. AI Output: {ai_decision}"}
         except Exception as e:
