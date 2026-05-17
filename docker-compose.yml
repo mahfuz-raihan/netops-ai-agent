@@ -11,6 +11,10 @@ services:
       - AGENT_MODEL=llama3.2:1b
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - AZURE_OPENAI_CHAT_API_VERSION=${AZURE_OPENAI_CHAT_API_VERSION}
     volumes:
       # Mount the ENTIRE rules folder to prevent the Windows file-sync bug
       - ./rules:/app/rules
