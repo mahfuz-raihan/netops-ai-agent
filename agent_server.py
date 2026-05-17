@@ -4,6 +4,7 @@ import requests
 import os
 import uvicorn
 import re
+from openai import AzureOpenAI
 
 app = FastAPI(title="Secure Agent Gateway")
 
@@ -12,6 +13,12 @@ MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 
 
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+
+# --- Azure OpenAI Configurations ---
+AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+AZURE_OPENAI_CHAT_API_VERSION = os.getenv("AZURE_OPENAI_CHAT_API_VERSION")
 
 def send_to_discord(message: str):
     """Helper function to send messages to Discord with explicit error logging."""
@@ -26,7 +33,34 @@ def send_to_discord(message: str):
         else:
             print(f"❌ [DEBUG] Discord rejected the Webhook. Code: {response.status_code}, Reason: {response.text}")
     except Exception as e:
-        print(f"❌ [DEBUG] Failed to reach Discord servers entirely: {e}")
+        print(f"❌ [DEBUG] Discord Webhook Failed: {e}")
+
+def get_azure_forensic_report(log_data: str) -> str:
+    """Uses Azure OpenAI to write a highly technical forensic report."""
+    if not AZURE_API_KEY or not AZURE_ENDPOINT:
+        return "*(Azure OpenAI keys not found. Skipping deep forensic analysis.)*"
+        
+    print("☁️ [DEBUG] Contacting Azure OpenAI for Deep Analysis...")
+    try:
+        client = AzureOpenAI(
+            api_key=AZURE_API_KEY,
+            api_version=AZURE_OPENAI_CHAT_API_VERSION,
+            azure_endpoint=AZURE_ENDPOINT
+        )
+        
+        response = client.chat.completions.create(
+            model=AZURE_DEPLOYMENT,
+            messages=[
+                {"role": "system", "content": "You are a Tier-3 SOC Analyst. Provide a highly technical, 2-sentence forensic analysis of the following security log. Explain the attack vector."},
+                {"role": "user", "content": log_data}
+            ],
+            max_tokens=150
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"❌ [DEBUG] Azure Error: {e}")
+        return f"*(Azure Analysis Failed: {e})*"
+
 
 @app.post("/api/agent")
 async def handle_agent_task(request: Request):
@@ -56,7 +90,7 @@ async def handle_agent_task(request: Request):
                 
                 return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()}"}
             except Exception as e:
-                 print(f"❌ [DEBUG] Subprocess crash: {e}")
+                 print(f"[DEBUG] Subprocess failed. Error: {e}")
                  return {"result": f"Agent Error: {str(e)}"}
         else:
              print("❌ [DEBUG] Execution failed: Could not find IP.")
@@ -67,9 +101,9 @@ async def handle_agent_task(request: Request):
         
         # Ask the LLM ONLY to extract the IP — never trust it to format the full message.
         tactical_prompt = f"""
-        Your only job is to extract the IPv4 address from the text below.
-        Reply with ONLY the IPv4 address, nothing else. No sentences, no extra words.
-
+        Extract the IPv4 address from the text below. 
+        Reply EXACTLY with this sentence, replacing [IP] with the address:
+        'Hey, boss/master!! our AI system detected something unusual illegal activities such as hacking and unauthorized access to systems from [IP], May I block this? I'm waiting for your approval.'
         Text: {incident_prompt}
         """
         
@@ -97,24 +131,25 @@ async def handle_agent_task(request: Request):
                 except Exception as e:
                     print(f"❌ [DEBUG] Staging script crashed: {e}")
                 
-                # Build the Discord message from a fixed Python template — never trust the LLM to format it.
+                # cloud LLM deep analysis (Azure OpenAI) + send to Discord for human approval
+                azure_report = get_azure_forensic_report(incident_prompt)
+                # combine and send to discord with clear instructions for the SOC analyst to approve the block if they agree with the AI's assessment
                 discord_message = (
                     f"**OpenClaw:** Boss!!! Our AI system detected something unusual illegal activities "
                     f"such as hacking and unauthorized access to systems from `{ip_to_block}`, "
                     f"May I block this? I'm waiting for your approval."
                     f"\n\n*(Type `!approve {ip_to_block}` to authorize)*"
+                    f"\n\n☁️ **Forensic Analysis:** {azure_report}"
                 )
                 send_to_discord(discord_message)
                 
-                return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()}"}
+                return {"result": "Staged successfully."}
                 
             else:
-                print("[DEBUG] No IP found in LLM response.")
-                return {"result": f"Agent determined no action needed. Raw AI Output: {ai_decision}"}
-                
+                return {"result": f"No IP found. AI Output: {ai_decision}"}
         except Exception as e:
-            print(f"❌ [DEBUG] Major Exception in THREAT ANALYSIS: {str(e)}")
             return {"result": f"Agent Error: {str(e)}"}
+        
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
