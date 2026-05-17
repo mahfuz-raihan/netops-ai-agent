@@ -137,11 +137,11 @@ async def handle_agent_task(request: Request):
                 azure_report = get_azure_forensic_report(incident_prompt)
                 # combine and send to discord with clear instructions for the SOC analyst to approve the block if they agree with the AI's assessment
                 discord_message = (
-                    f"**OpenClaw:** Boss!!! Our AI system detected something unusual illegal activities "
-                    f"such as hacking and unauthorized access to systems from `{ip_to_block}`, "
-                    f"May I block this? I'm waiting for your approval."
-                    f"\n\n*(Type `!approve {ip_to_block}` to authorize)*"
-                    f"\n\n☁️ **Forensic Analysis:** {azure_report}"
+                    f"\n\n🤖 **OpenClaw:** Boss!!! Our AI system detected something unusual illegal activities"
+                    f"such as hacking and unauthorized access to systems from `{ip_to_block}`, \n"
+                    f"May I block this? I'm waiting for your approval.\n"
+                    f"\n*(Type `!approve {ip_to_block}` to authorize)*\n"
+                    f"\n☁️ **Forensic Analysis:** {azure_report}\n\n"
                 )
                 send_to_discord(discord_message)
                 
