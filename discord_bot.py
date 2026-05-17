@@ -31,17 +31,21 @@ async def approve(ctx, ip_address: str):
             timeout=15
         )
         
-        if response.status_code != 200:
+        if response.status_code == 200:
+            await ctx.send(f"✅ Success! FastAPI confirmed the block.")
+        else:
             await ctx.send(f"❌ Backend rejected the command: {response.text}")
             
     except requests.exceptions.RequestException as e:
-        await ctx.send(f"❌ Failed to reach the FastAPI server. Error: {e}")
+        await ctx.send(f"❌ Failed to reach the FastAPI server. Is Uvicorn running? Error: {e}")
 
 if __name__ == "__main__":
     # --- PASTE YOUR SECRET BOT TOKEN BELOW ---
     DISCORD_BOT_TOKEN = os.getenv("DISCORD_TOKEN")
     
-    if DISCORD_BOT_TOKEN == None:
-        print("ERROR: Please paste your Bot Token into discord_bot.py!")
+    if DISCORD_BOT_TOKEN is None:
+        print("ERROR: DISCORD_TOKEN environment variable is not set!")
+        print("Please set it in your terminal before running this script.")
     else:
+        print("DISCORD_TOKEN found.")
         bot.run(DISCORD_BOT_TOKEN)

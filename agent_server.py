@@ -16,12 +16,21 @@ MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 def send_to_discord(message: str):
-    """Helper function to send messages to Discord."""
-    if DISCORD_WEBHOOK_URL != os.getenv("DISCORD_WEBHOOK_URL"):
-        try:
-            requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
-        except Exception as e:
-            print(f"Failed to send Discord webhook: {e}")
+    """Helper function to send messages to Discord with explicit error logging."""
+    if DISCORD_WEBHOOK_URL == "YOUR_WEBHOOK_URL_HERE" or not DISCORD_WEBHOOK_URL.startswith("http"):
+        print("❌ DISCORD ERROR: Webhook URL is missing or invalid in agent_server.py!")
+        return
+        
+    try:
+        print(f"📡 Attempting to send Webhook to Discord...")
+        response = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
+        
+        if response.status_code in [200, 204]:
+            print("✅ Discord Webhook delivered successfully!")
+        else:
+            print(f"❌ Discord rejected the Webhook. Code: {response.status_code}, Reason: {response.text}")
+    except Exception as e:
+        print(f"❌ Failed to reach Discord servers entirely: {e}")
 
 @app.post("/api/agent")
 async def handle_agent_task(request: Request):
@@ -72,8 +81,9 @@ async def handle_agent_task(request: Request):
                     capture_output=True, text=True
                 )
                 
-                # Agent asks for permission in Discord
-                send_to_discord(f"🤖 **OpenClaw:** {ai_decision}\n\n*(Type `!approve {ip_to_block}` to authorize)*")
+                # Send the "Hey Boss" Request to Discord!
+                discord_message = f"🤖 **OpenClaw:** {ai_decision}\n\n*(Type `!approve {ip_to_block}` to authorize)*"
+                send_to_discord(discord_message)
                 
                 return {"result": f"Output: {process.stdout.strip()} | Errors: {process.stderr.strip()}"}
                 
