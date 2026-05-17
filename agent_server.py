@@ -5,6 +5,8 @@ import os
 import uvicorn
 import re
 from openai import AzureOpenAI
+from dotenv import load_dotenv
+load_dotenv()
 
 app = FastAPI(title="Secure Agent Gateway")
 
