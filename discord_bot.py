@@ -32,7 +32,7 @@ async def approve(ctx, ip_address: str):
         )
         
         if response.status_code == 200:
-            await ctx.send(f"✅ Success! FastAPI confirmed the block.")
+            await ctx.send(f"✅ Success! OpenClaw confirmed the block.")
         else:
             await ctx.send(f"❌ Backend rejected the command: {response.text}")
             
