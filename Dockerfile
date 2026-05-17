@@ -6,7 +6,7 @@ RUN useradd -m -s /bin/bash agentuser
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --no-cache-dir fastapi uvicorn requests openclaw
+RUN pip install --no-cache-dir fastapi uvicorn requests openclaw discord.py
 
 # Copy files
 COPY agent_server.py /app/agent_server.py
