@@ -75,7 +75,7 @@ def check_security(text: str) -> GuardrailResult:
     lower = text.lower()
     for pattern in _PROMPT_INJECTION_PATTERNS:
         if re.search(pattern, lower):
-            print(f"🚨 [GUARDRAIL] Prompt injection detected. Pattern: '{pattern}'")
+            # print(f"🚨 [GUARDRAIL] Prompt injection detected. Pattern: '{pattern}'")
             return GuardrailResult(
                 passed=False,
                 reason=f"Security violation: prompt injection attempt detected."
@@ -100,7 +100,7 @@ def check_command_injection(ip_string: str) -> GuardrailResult:
     it reaches subprocess.run(). Lightweight but critical.
     """
     if _SHELL_INJECTION_CHARS.search(ip_string):
-        print(f"🚨 [GUARDRAIL] Command injection attempt in IP string: '{ip_string}'")
+        # print(f"🚨 [GUARDRAIL] Command injection attempt in IP string: '{ip_string}'")
         return GuardrailResult(
             passed=False,
             reason="Security violation: shell metacharacters detected in IP address."
@@ -145,13 +145,13 @@ def check_response_relevance(llm_output: str) -> GuardrailResult:
         )
 
     if len(llm_output) > _MAX_RESPONSE_LENGTH:
-        print(f"⚠️ [GUARDRAIL] LLM response unusually long ({len(llm_output)} chars). Truncating.")
+        # print(f"⚠️ [GUARDRAIL] LLM response unusually long ({len(llm_output)} chars). Truncating.")
         llm_output = llm_output[:_MAX_RESPONSE_LENGTH]
 
     lower = llm_output.lower()
     for phrase in _OFF_TOPIC_PHRASES:
         if phrase in lower:
-            print(f"⚠️ [GUARDRAIL] LLM went off-topic. Phrase detected: '{phrase}'")
+            # print(f"⚠️ [GUARDRAIL] LLM went off-topic. Phrase detected: '{phrase}'")
             return GuardrailResult(
                 passed=False,
                 reason=f"LLM response appears off-topic (contains: '{phrase}').",
@@ -201,7 +201,7 @@ def check_language_quality(text: str, context: str = "report") -> GuardrailResul
     lower = text.lower()
     found_profanity = [w for w in _PROFANITY_LIST if w in lower]
     if found_profanity:
-        print(f"⚠️ [GUARDRAIL] Profanity detected in {context}: {found_profanity}")
+        # print(f"⚠️ [GUARDRAIL] Profanity detected in {context}: {found_profanity}")
         return GuardrailResult(
             passed=False,
             reason=f"Generated {context} contains inappropriate language."
@@ -247,7 +247,15 @@ def check_content(log_entry: dict) -> GuardrailResult:
     # Validate timestamp is parseable
     if timestamp:
         parsed = False
-        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"):
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S",           # 2026-05-17T12:43:38
+            "%Y-%m-%dT%H:%M:%S.%f",        # 2026-05-17T12:43:38.467259  ← Python default
+            "%Y-%m-%d %H:%M:%S",           # 2026-05-17 12:43:38
+            "%Y-%m-%dT%H:%M:%SZ",          # 2026-05-17T12:43:38Z
+            "%Y-%m-%dT%H:%M:%S.%fZ",       # 2026-05-17T12:43:38.467259Z
+            "%Y-%m-%dT%H:%M:%S%z",         # 2026-05-17T12:43:38+06:00
+            "%Y-%m-%dT%H:%M:%S.%f%z",      # 2026-05-17T12:43:38.467259+06:00
+        ):
             try:
                 datetime.strptime(timestamp, fmt)
                 parsed = True
@@ -262,12 +270,13 @@ def check_content(log_entry: dict) -> GuardrailResult:
 
     # Validate action
     if action.upper() not in _ALLOWED_ACTIONS:
-        print(f"⚠️ [GUARDRAIL] Unknown action type: '{action}'. Allowing but flagging.")
-        # Warn but allow — unknown actions shouldn't crash the system
+        # print(f"⚠️ [GUARDRAIL] Unknown action type: '{action}'. Allowing but flagging.")
+        pass  # Warn but allow — unknown actions shouldn't crash the system
 
     # Validate status
     if status.upper() not in _ALLOWED_STATUSES:
-        print(f"⚠️ [GUARDRAIL] Unknown status value: '{status}'. Allowing but flagging.")
+        # print(f"⚠️ [GUARDRAIL] Unknown status value: '{status}'. Allowing but flagging.")
+        pass  # Warn but allow
 
     # Validate message length
     if not message or not message.strip():
@@ -338,7 +347,8 @@ def check_ip_validity(
             reason=f"'{ip}' is a private/RFC1918 address. {context.capitalize()} private IPs is disallowed."
         )
     if addr.is_private:
-        print(f"⚠️ [GUARDRAIL] '{ip}' is a private IP. Allowing for {context} but flagging.")
+        # print(f"⚠️ [GUARDRAIL] '{ip}' is a private IP. Allowing for {context} but flagging.")
+        pass  # Warn but allow
 
     return GuardrailResult(passed=True, reason="OK", sanitized_value=ip)
 
@@ -369,10 +379,11 @@ def check_logic_before_execute(
             with open(staged_rules_path, "r") as f:
                 staged_content = f.read()
             if ip not in staged_content:
-                print(f"⚠️ [GUARDRAIL] IP '{ip}' not found in staged rules. Proceeding anyway.")
-                # Warn but don't hard-block — staging script may not have written yet
+                # print(f"⚠️ [GUARDRAIL] IP '{ip}' not found in staged rules. Proceeding anyway.")
+                pass  # Warn but don't hard-block — staging script may not have written yet
     except Exception as e:
-        print(f"⚠️ [GUARDRAIL] Could not read staged rules file: {e}")
+        # print(f"⚠️ [GUARDRAIL] Could not read staged rules file: {e}")
+        pass  # Non-fatal — continue with rate limiting
 
     # 3. Rate limiting
     now = datetime.utcnow()

@@ -6,10 +6,11 @@ RUN useradd -m -s /bin/bash agentuser
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --no-cache-dir fastapi uvicorn requests openclaw discord.py openai load-dotenv
+RUN pip install --no-cache-dir fastapi uvicorn requests openclaw discord.py openai python-dotenv
 
 # Copy files
 COPY agent_server.py /app/agent_server.py
+COPY guardrails.py /app/guardrails.py
 COPY ./netops_skill /app/netops_skill
 
 # Create rules directory and give the restricted user permission
