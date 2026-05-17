@@ -9,6 +9,8 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - AGENT_MODEL=llama3.2:1b
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
     volumes:
       # Mount the ENTIRE rules folder to prevent the Windows file-sync bug
       - ./rules:/app/rules
