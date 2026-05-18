@@ -22,20 +22,29 @@ async def on_ready():
 async def approve(ctx, ip_address: str):
     """Listens for !approve 192.168.1.1 in Discord"""
     await ctx.send(f"🛡️ Relaying authorization to block `{ip_address}`...")
-    
+
     try:
-        # We hit our existing FastAPI endpoint just like the Web Dashboard does!
         response = requests.post(
-            FASTAPI_URL, 
+            FASTAPI_URL,
             json={"ip_address": ip_address},
             timeout=15
         )
-        
+
         if response.status_code == 200:
-            await ctx.send(f"✅ Success! OpenClaw confirmed the block.")
+            await ctx.send(f"✅ **Success!** OpenClaw confirmed the block on `{ip_address}`.")
+
+        elif response.status_code == 409:
+            # Guardrail: IP is already blocked — not an error, just inform the user
+            await ctx.send(f"ℹ️ `{ip_address}` is **already blocked**. No action needed.")
+
+        elif response.status_code == 422:
+            # Guardrail: IP failed validation (malformed, loopback, etc.)
+            detail = response.json().get("detail", response.text)
+            await ctx.send(f"⚠️ **Invalid IP address:** {detail}")
+
         else:
-            await ctx.send(f"❌ Backend rejected the command: {response.text}")
-            
+            await ctx.send(f"❌ Unexpected response from backend (HTTP {response.status_code}): {response.text}")
+
     except requests.exceptions.RequestException as e:
         await ctx.send(f"❌ Failed to reach the FastAPI server. Is Uvicorn running? Error: {e}")
 
