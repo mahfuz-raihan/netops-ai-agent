@@ -56,7 +56,7 @@ def generate_ddos_log():
 def run_simulation():
     print("🚀 Starting Multi-Attacker Network Simulation...")
 
-    attacker_index = 0  # Round-robin through the attacker pool
+    attacker_index = 0
 
     while True:
         # ── Normal traffic phase ──────────────────────────────────────────────
@@ -64,7 +64,8 @@ def run_simulation():
         for _ in range(5):
             try:
                 log = generate_normal_log()
-                requests.post(API_URL, json=log, timeout=5)
+                # FIX: Increased timeout to 30s to allow Azure and Ollama to process
+                requests.post(API_URL, json=log, timeout=30)
                 time.sleep(1)
             except requests.exceptions.RequestException:
                 print("❌ Cannot connect to server. Retrying in 5s...")
@@ -86,7 +87,8 @@ def run_simulation():
                     for _ in range(5):
                         attack_count += 1
                         log = generate_ddos_log()
-                        response = requests.post(API_URL, json=log, timeout=5)
+                        # FIX: Increased timeout to 30s
+                        response = requests.post(API_URL, json=log, timeout=30)
                         
                         # If the server drops the connection, it means the subnet ban worked!
                         if response.status_code == 403:
@@ -99,7 +101,8 @@ def run_simulation():
                         break 
                         
                     print(f"  Flood batch {attack_count} sent... server still standing.")
-                    time.sleep(0.5) # Slight pause so we don't accidentally crash our own local PC!
+                    # Slight pause so we don't accidentally crash your own local PC!
+                    time.sleep(0.5) 
                     
                 except requests.exceptions.RequestException as e:
                     print(f"Simulation error: {e}")
@@ -119,7 +122,8 @@ def run_simulation():
                 try:
                     attack_count += 1
                     log = generate_attack_log(current_attacker)
-                    response = requests.post(API_URL, json=log, timeout=5)
+                    # FIX: Increased timeout to 30s
+                    response = requests.post(API_URL, json=log, timeout=30)
 
                     if response.status_code == 403:
                         print(f"🛑 FIREWALL BLOCK: {current_attacker} connection dropped after {attack_count} packets!")
@@ -127,7 +131,7 @@ def run_simulation():
                         time.sleep(3)
                         break
 
-                    print(f" Attack packet {attack_count} from {current_attacker} — awaiting AI defense...")
+                    print(f"  Attack packet {attack_count} from {current_attacker} — awaiting AI defense...")
                     time.sleep(2)
 
                 except requests.exceptions.RequestException as e:
