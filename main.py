@@ -67,6 +67,7 @@ def is_ip_blocked(ip_address: str) -> bool:
             if ip_address in rules:
                 BLOCKED_IPS.add(ip_address) 
                 return True
+            # Check if the emergency Subnet Lockdown is active
             if "SUBNET 10.0.0.0/8" in rules and ip_address.startswith("10."):
                 return True
     except Exception as e:
@@ -138,7 +139,7 @@ async def ingest_log(log: LogEntry):
         cursor.execute('''
             INSERT INTO logs (timestamp, ip_address, action, status, message, extracted_nlp_data, is_anomaly, anomaly_score, agent_report)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (log.timestamp, log.ip_address, log.action, log.status, sanitized_message, nlp_entities_json, is_anomaly, anomaly_score, agent_report))
+        ''', (log.timestamp, log.ip_address, log.action, log.status, log.message, nlp_entities_json, is_anomaly, anomaly_score, agent_report))
         conn.commit()
         conn.close()
         
