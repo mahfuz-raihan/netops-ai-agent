@@ -6,7 +6,6 @@ import datetime
 API_URL = "http://127.0.0.1:8000/ingest-log"
 
 # ── Multi-attacker pool ───────────────────────────────────────────────────────
-# Add or remove IPs here to simulate coordinated multi-source attacks.
 ATTACKER_IPS = [
     "45.33.22.11",    # Original attacker
     "185.220.101.45", # Tor exit node
@@ -43,9 +42,19 @@ def generate_attack_log(attacker_ip: str):
         "message": msg_template.format(ip=attacker_ip),
     }
 
+def generate_ddos_log():
+    """Generate a high-volume log line simulating a UDP flood from a random 10.x.x.x IP."""
+    ip_address = f"10.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}"
+    return {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "ip_address": ip_address, 
+        "action": "HTTP_GET /",
+        "status": "FAILED",
+        "message": f"UDP flood - massive traffic spike detected"
+    }
+
 def run_simulation():
-    print("Starting Multi-Attacker Network Simulation...")
-    # print(f"   Attacker pool: {ATTACKER_IPS}\n")
+    print("🚀 Starting Multi-Attacker Network Simulation...")
 
     attacker_index = 0  # Round-robin through the attacker pool
 
@@ -58,42 +67,76 @@ def run_simulation():
                 requests.post(API_URL, json=log, timeout=5)
                 time.sleep(1)
             except requests.exceptions.RequestException:
-                print("❌ Cannot connect to FastAPI server. Retrying in 5s...")
+                print("❌ Cannot connect to server. Retrying in 5s...")
                 time.sleep(5)
                 continue
 
-        # ── Attack phase — pick next attacker ─────────────────────────────────
-        current_attacker = ATTACKER_IPS[attacker_index % len(ATTACKER_IPS)]
-        attacker_index += 1
+        # ── Determine Attack Type (Targeted vs DDoS) ──────────────────────────
+        # 20% chance for a massive DDoS flood, 80% chance for a targeted attack
+        is_ddos = random.random() < 0.20
 
-        print(f"\n🚨 Attacker #{attacker_index} connected: {current_attacker}")
-        print("   Initiating Attack Sequence...")
-
-        attack_count = 0
-        while True:
-            try:
-                attack_count += 1
-                log = generate_attack_log(current_attacker)
-                response = requests.post(API_URL, json=log, timeout=5)
-
-                if response.status_code == 403:
-                    print(f"🛑 FIREWALL BLOCK: {current_attacker} connection dropped after {attack_count} packets!")
-                    print("🛡️  Attack neutralized. Returning to normal operations...\n")
-                    time.sleep(3)
+        if is_ddos:
+            print("\n🚨🚨🚨 MASSIVE DDOS BOTNET DETECTED! 🚨🚨🚨")
+            print("Flooding server with UDP requests from random 10.x.x.x subnets...")
+            
+            attack_count = 0
+            while True:
+                try:
+                    # Fire 5 logs instantly with no delay to simulate a flood
+                    for _ in range(5):
+                        attack_count += 1
+                        log = generate_ddos_log()
+                        response = requests.post(API_URL, json=log, timeout=5)
+                        
+                        # If the server drops the connection, it means the subnet ban worked!
+                        if response.status_code == 403:
+                            print(f"\n🛑 FIREWALL BLOCK: Botnet traffic dropped after {attack_count} packets!")
+                            print("🛡️ DDoS Mitigated! Returning to normal operations...\n")
+                            break
+                            
+                    if response.status_code == 403:
+                        time.sleep(3)
+                        break 
+                        
+                    print(f"  Flood batch {attack_count} sent... server still standing.")
+                    time.sleep(0.5) # Slight pause so we don't accidentally crash our own local PC!
+                    
+                except requests.exceptions.RequestException as e:
+                    print(f"Simulation error: {e}")
+                    time.sleep(5)
                     break
+                    
+        else:
+            # ── Targeted Attack phase ─────────────────────────────────────────
+            current_attacker = ATTACKER_IPS[attacker_index % len(ATTACKER_IPS)]
+            attacker_index += 1
 
-                print(f"   Attack packet {attack_count} from {current_attacker} — awaiting AI defense...")
-                time.sleep(2)
+            print(f"\n🚨 Attacker #{attacker_index} connected: {current_attacker}")
+            print("  Initiating Targeted Attack Sequence...")
 
-            except requests.exceptions.RequestException as e:
-                print(f"Simulation error: {e}")
-                time.sleep(5)
-                break
+            attack_count = 0
+            while True:
+                try:
+                    attack_count += 1
+                    log = generate_attack_log(current_attacker)
+                    response = requests.post(API_URL, json=log, timeout=5)
+
+                    if response.status_code == 403:
+                        print(f"🛑 FIREWALL BLOCK: {current_attacker} connection dropped after {attack_count} packets!")
+                        print("🛡️  Attack neutralized. Returning to normal operations...\n")
+                        time.sleep(3)
+                        break
+
+                    print(f" Attack packet {attack_count} from {current_attacker} — awaiting AI defense...")
+                    time.sleep(2)
+
+                except requests.exceptions.RequestException as e:
+                    print(f"Simulation error: {e}")
+                    time.sleep(5)
+                    break
 
 if __name__ == "__main__":
     try:
         run_simulation()
     except KeyboardInterrupt:
         print("\n🛑 Simulation Stopped by User.")
-
-
