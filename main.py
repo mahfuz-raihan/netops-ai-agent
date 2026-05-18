@@ -67,8 +67,10 @@ def is_ip_blocked(ip_address: str) -> bool:
             if ip_address in rules:
                 BLOCKED_IPS.add(ip_address) 
                 return True
-    except Exception:
-        pass
+            if "SUBNET 10.0.0.0/8" in rules and ip_address.startswith("10."):
+                return True
+    except Exception as e:
+        print(f"Error reading firewall rules: {e}")
     return False
 
 @app.post("/ingest-log")
@@ -192,6 +194,28 @@ async def approve_block(action: ApproveAction):
             
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Failed to reach Agent: {str(e)}")
+@app.post("/defend-ddos")
+async def defend_ddos():
+    """Delegates the emergency subnet lockdown command to the OpenClaw Agent."""
+    print("\n🚨 HUMAN OVERRIDE: Admin activated UNDER ATTACK MODE!")
+    print("Delegating subnet lockdown command to OpenClaw Agent...")
+    
+    execution_prompt = "SYSTEM COMMAND: EXECUTE UNDER ATTACK MODE"
+    
+    try:
+        agent_response = requests.post(
+            "http://127.0.0.1:8001/api/agent", 
+            json={"prompt": execution_prompt},
+            timeout=15
+        )
+        if agent_response.status_code == 200:
+            print("🤖 Agent successfully applied Subnet Lockdown.")
+            return {"status": "success", "message": "Under Attack Mode activated."}
+        else:
+            raise HTTPException(status_code=500, detail="Agent rejected command.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 
 @app.get("/blocked-ips")
 async def get_blocked_ips():
@@ -207,6 +231,6 @@ async def get_blocked_ips():
                             ip = parts[1].split()[0]
                             if ip not in blocked_list:
                                 blocked_list.append(ip)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error reading firewall rules: {e}")
     return {"blocked_ips": blocked_list}
