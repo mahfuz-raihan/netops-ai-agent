@@ -9,7 +9,7 @@ NetOps-AI is a containerized, AI-driven Security Operations Center (SOC) that au
 
 By utilizing state-of-the-art AI technologies like NLP and ML, alongside a secure Agent Gateway (OpenClaw Agent) for reasoning, the platform dramatically reduces response times to potential threats.
 
-## 🚀 Key Features
+## Key Features
 
 - **Real-time Traffic Ingestion:**: Uses a high-performance FastAPI backend to receive log streams securely.
 - **Deep Learning Anomaly Detection:**: Utilizes a PyTorch Hugging Face model `(distilbert-base-uncased-mnli)` for `zero-shot classification` to detect brute-force attacks and network anomalies.
@@ -40,7 +40,7 @@ flowchart TD
     K --> G
 ```
 
-## 🏗️ System Architecture
+## System Architecture
 
 - **Log Generator**: Simulates normal network traffic and targeted `Brute Force/DDoS` attacks.
 - **FastAPI Virtual Firewall**: Intercepts traffic, blocking known bad IPs instantly from an in-memory cache and live `firewall_rules.txt` file.
@@ -50,7 +50,7 @@ flowchart TD
 - **SOC Dashboard**: The UI displays the pending threat. Upon Human Approval, the FastAPI server delegates execution authority back to the `OpenClaw` Agent.
 - **Execution**: The Agent applies the live block, and the network is secured.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Language**: Python 3.11
 - **API Framework**: FastAPI, Uvicorn
@@ -82,7 +82,7 @@ uvicorn main:app --reload
 python log_generator.py
 ```
 
-## 🧪 Testing
+## Testing
 This project includes automated testing for the API endpoints and ML processing logic. Run tests using:
 ```
 pytest test_main.py -v
