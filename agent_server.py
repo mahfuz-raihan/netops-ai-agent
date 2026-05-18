@@ -91,8 +91,25 @@ async def handle_agent_task(request: Request):
     incident_prompt = scrub_pii(incident_prompt)
 
     is_execution_order = "EXECUTE PREVIOUSLY STAGED RULE" in incident_prompt
+    is_ddos_defense = "EXECUTE UNDER ATTACK MODE" in incident_prompt
 
-    if is_execution_order:
+    if is_ddos_defense:
+        print("[DEBUG] Workflow: DDOS MITIGATION detected.")
+        try:
+            # Execute the emergency mitigation script directly
+            process = subprocess.run(
+                ["python", "/app/netops_skill/enable_under_attack_mode.py"],
+                capture_output=True, text=True
+            )
+            print(f"[DEBUG] Subprocess executed. Output: {process.stdout}")
+            
+            # Send confirmation to Discord
+            send_to_discord("🛡️ **OpenClaw Executed:** Emergency Subnet Lockdown applied! Botnet traffic dropped.")
+            return {"result": f"Output: {process.stdout.strip()}"}
+        except Exception as e:
+            return {"result": f"Agent Error: {str(e)}"}
+
+    elif is_execution_order:
         print("[DEBUG] Workflow: EXECUTION ORDER detected.")
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', incident_prompt)
         
